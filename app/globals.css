@@ -1,0 +1,38 @@
+:root {
+  --ft-bg-primary: #0a0a0f;
+  --ft-bg-secondary: #12121a;
+  --ft-accent: #00d4ff;
+  --ft-text: #ffffff;
+  --ft-text-muted: #8b8b9e;
+  --ft-border: #2a2a3e;
+  --ft-success: #00ff88;
+  --ft-error: #ff4444;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--ft-bg-primary);
+  color: var(--ft-text);
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+button {
+  background: var(--ft-accent);
+  color: var(--ft-bg-primary);
+  border: none;
+  padding: 12px 24px;
+  font-size: 16px;
+  font-weight: 600;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+button:hover {
+  opacity: 0.9;
+}

@@ -1,0 +1,7 @@
+{
+  "name": "My Game",
+  "description": "A fun game for fishtank",
+  "version": "1.0.0",
+  "tags": ["arcade", "casual"],
+  "thumbnail": "/assets/thumbnail.png"
+}
