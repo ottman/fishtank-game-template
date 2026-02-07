@@ -1,7 +1,19 @@
 {
-  "name": "My Game",
-  "description": "A fun game for fishtank",
+  "name": "Fishtank Game",
+  "description": "A client-side game built with fishtank-game-template",
   "version": "1.0.0",
-  "tags": ["arcade", "casual"],
-  "thumbnail": "/assets/thumbnail.png"
+  "tags": ["arcade", "casual", "canvas"],
+  "thumbnail": "/assets/thumbnail.png",
+  "author": "",
+  "template": {
+    "name": "fishtank-game-template",
+    "version": "1.0.0",
+    "repository": "https://github.com/ottman/fishtank-game-template"
+  },
+  "game": {
+    "width": 800,
+    "height": 600,
+    "controls": ["keyboard", "mouse", "touch"],
+    "features": ["score", "highscore", "pause"]
+  }
 }

@@ -1,155 +1,136 @@
 # Fishtank Game Template
 
-A template for building client-side React games that work with fishtank's Next.js app and social.dev-combined's AI app builder.
+A template for building client-side React games for the Fishtank arcade.
 
 ## Quick Start
 
 ```bash
-# Install dependencies
 npm install
-
-# Run development server
 npm run dev
-
-# Build for production
-npm run build
 ```
 
-Visit [http://localhost:3000](http://localhost:3000) to see your game.
+Visit [http://localhost:3000](http://localhost:3000)
 
 ## Project Structure
 
 ```
-fishtank-game-template/
-├── app/
+├── app/                    # Next.js app directory
 │   ├── page.tsx           # Entry point - renders <Game />
-│   ├── layout.tsx         # HTML wrapper
-│   └── globals.css        # Fishtank theme variables
+│   ├── layout.tsx         # HTML wrapper with metadata
+│   └── globals.css        # Fishtank theme CSS variables
 │
 ├── components/game/
-│   ├── Game.tsx           # MAIN FILE - your game logic goes here
+│   ├── Game.tsx           # ⭐ MAIN FILE - your game logic goes here
 │   ├── Game.module.css    # Game styles
-│   ├── GameWindow.tsx     # Container wrapper
-│   └── GameControls.tsx   # Play/Pause/Reset buttons
+│   ├── GameWindow.tsx     # Container wrapper (responsive)
+│   └── GameControls.tsx   # Pause/Resume/Reset buttons
 │
 ├── lib/
-│   ├── types.ts           # GameState enum, interfaces
+│   ├── types.ts           # TypeScript types & interfaces
+│   ├── utils.ts           # Collision, math, vector utilities
 │   └── hooks/
-│       ├── useGameState.ts    # State machine (idle/playing/paused/over)
-│       ├── useGameLoop.ts     # requestAnimationFrame loop
-│       ├── useKeyboard.ts     # Keyboard input tracking
-│       ├── useMouse.ts        # Mouse/touch input
+│       ├── useGameState.ts    # Game lifecycle management
+│       ├── useGameLoop.ts     # 60fps animation loop
+│       ├── useKeyboard.ts     # Keyboard input
+│       ├── useMouse.ts        # Mouse & touch input
+│       ├── useCanvas.ts       # Canvas drawing utilities
 │       └── useSound.ts        # Audio playback
 │
-├── public/assets/         # Static assets (images, sounds)
-└── metadata.json          # Game configuration
+├── metadata.json          # Game info (name, description, tags)
+└── public/assets/         # Static files (images, sounds)
 ```
 
 ## Building Your Game
 
-### 1. Edit `components/game/Game.tsx`
+Edit `components/game/Game.tsx`. The template includes a working demo game.
 
-This is where your game logic lives. The template provides:
-
-- **State management** via `useGameState()` - handles idle, playing, paused, and game over states
-- **Game loop** via `useGameLoop()` - runs at 60fps with delta time
-- **Input handling** via `useKeyboard()` and `useMouse()` - tracks user input
-- **Canvas rendering** - an 800x600 canvas ready for your graphics
-
-### 2. Implement the Game Loop
+### Game Configuration
 
 ```typescript
-useGameLoop((delta) => {
-  const ctx = canvasRef.current?.getContext('2d');
-  if (!ctx) return;
-
-  // Clear the canvas
-  ctx.fillStyle = '#12121a';
-  ctx.fillRect(0, 0, 800, 600);
-
-  // Update game objects based on delta time (in milliseconds)
-  player.x += player.vx * (delta / 1000);
-
-  // Check for input
-  if (isPressed('ArrowLeft')) player.vx = -200;
-  if (isPressed('ArrowRight')) player.vx = 200;
-
-  // Draw game objects
-  ctx.fillStyle = '#00d4ff';
-  ctx.fillRect(player.x, player.y, 50, 50);
-
-  // Check for game over
-  if (gameOverCondition) {
-    end({ score: currentScore });
-  }
-}, state === GameState.PLAYING);
+const CONFIG = {
+  width: 800,           // Canvas width
+  height: 600,          // Canvas height
+  playerSpeed: 300,     // Pixels per second
+  // Add your game-specific config here
+};
 ```
 
-### 3. Handle Game States
+### Game State (useRef)
 
-The template provides overlays for each state:
-
-- **IDLE** - "Ready to Play?" with Start button
-- **PAUSED** - "Paused" with Resume button
-- **GAME_OVER** - "Game Over!" with score and Play Again button
-
-Call `end({ score: 100 })` to trigger game over with a score.
-
-## Available Hooks
-
-### `useGameState()`
+Use `useRef` for game data that changes every frame:
 
 ```typescript
-const { state, result, play, pause, resume, reset, end } = useGameState();
+const player = useRef({ x: 400, y: 300, health: 100 });
+const enemies = useRef<Enemy[]>([]);
+const bullets = useRef<Bullet[]>([]);
 ```
 
-- `state` - Current GameState (IDLE, PLAYING, PAUSED, GAME_OVER)
-- `result` - GameResult after game ends (contains score)
-- `play()` - Start the game
-- `pause()` - Pause the game
-- `resume()` - Resume from pause
-- `reset()` - Reset to initial state
-- `end(result)` - End game with result
+### Game Loop
 
-### `useGameLoop(callback, active)`
+The game loop runs at 60fps. Use `deltaTime` for smooth movement:
 
 ```typescript
 useGameLoop((deltaTime) => {
-  // deltaTime is milliseconds since last frame
-}, state === GameState.PLAYING);
+  // Update (deltaTime is in milliseconds)
+  const speed = 200 * (deltaTime / 1000);
+  player.current.x += speed;
+
+  // Check collisions
+  if (enemyHit) addScore(10);
+  if (playerDead) end({ score });
+
+  // Render
+  clear();
+  drawCircle(player.current.x, player.current.y, 20, '#fff');
+}, isPlaying);
 ```
 
-### `useKeyboard()`
+### Input Handling
 
 ```typescript
-const { keys, isPressed } = useKeyboard();
+// Keyboard
+const { isPressed } = useKeyboard();
+if (isPressed('Space')) shoot();
+if (isPressed('ArrowLeft') || isPressed('KeyA')) moveLeft();
 
-if (isPressed('Space')) jump();
-if (isPressed('ArrowLeft')) moveLeft();
-```
-
-Common key codes: `ArrowUp`, `ArrowDown`, `ArrowLeft`, `ArrowRight`, `Space`, `KeyW`, `KeyA`, `KeyS`, `KeyD`
-
-### `useMouse(elementRef?)`
-
-```typescript
+// Mouse/Touch
 const mouse = useMouse(canvasRef);
-
-// mouse.x, mouse.y - position relative to canvas
-// mouse.isDown - whether mouse/touch is pressed
+if (mouse.isDown) moveToward(mouse.position);
+if (mouse.justPressed) onClick(mouse.position);
 ```
 
-### `useSound(src)`
+### Score & Game Over
 
 ```typescript
-const playExplosion = useSound('/assets/explosion.mp3');
+const { score, highScore, addScore, end } = useGameState();
 
-playExplosion(); // Play the sound
+// During gameplay
+addScore(10);
+
+// End the game
+end({ score: 1000 });
+```
+
+## Available Hooks
+
+| Hook | Purpose |
+|------|---------|
+| `useGameState()` | Game lifecycle: play, pause, resume, reset, end |
+| `useGameLoop(fn, active)` | 60fps loop with delta time |
+| `useKeyboard()` | Keyboard input tracking |
+| `useMouse(ref?)` | Mouse/touch position and clicks |
+| `useCanvas(config)` | Canvas context and drawing helpers |
+| `useSound(src)` | Audio playback |
+
+## Utility Functions
+
+```typescript
+import { clamp, lerp, random, randomInt } from '@/lib/utils';
+import { rectsCollide, circlesCollide, pointInRect } from '@/lib/utils';
+import { addVectors, scaleVector, normalizeVector } from '@/lib/utils';
 ```
 
 ## Theme Variables
-
-The template includes fishtank's dark theme:
 
 ```css
 --ft-bg-primary: #0a0a0f;
@@ -162,34 +143,32 @@ The template includes fishtank's dark theme:
 --ft-error: #ff4444;
 ```
 
-## Metadata
+## Parent Frame Communication
 
-Edit `metadata.json` to configure your game:
+Games automatically send messages to the parent fishtank frame:
 
-```json
-{
-  "name": "My Awesome Game",
-  "description": "A fun arcade game",
-  "version": "1.0.0",
-  "tags": ["arcade", "action"],
-  "thumbnail": "/assets/thumbnail.png"
-}
+```typescript
+// Sent automatically
+{ type: 'GAME_READY' }
+{ type: 'GAME_START' }
+{ type: 'GAME_PAUSE' }
+{ type: 'GAME_RESUME' }
+{ type: 'GAME_OVER', result: { score, highScore } }
+{ type: 'SCORE_UPDATE', score: number }
 ```
 
-## Deployment
-
-The template is configured for static export:
+## Building for Production
 
 ```bash
 npm run build
 ```
 
-This creates an `out/` directory with static files that can be hosted anywhere or embedded in fishtank.
+Creates a static export in `out/` that can be embedded in fishtank.
 
 ## Tips
 
-- Use `delta` time for smooth animations regardless of frame rate
-- Keep game state in `useRef` for values that change frequently
-- Use `useState` only for values that should trigger re-renders
-- Add sounds to `public/assets/` and load with `useSound`
-- Test keyboard input with the browser dev tools console
+- Use `deltaTime` for frame-rate independent movement
+- Use `useRef` for game state that changes every frame
+- Use `useState` only for UI that needs React re-renders
+- Test on mobile - touch controls are enabled by default
+- Keep the game loop fast - heavy computation causes lag
