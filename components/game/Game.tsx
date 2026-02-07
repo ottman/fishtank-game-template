@@ -11,12 +11,19 @@
  * - useKeyboard(): Tracks keyboard input
  * - useMouse(ref): Tracks mouse/touch input
  * - useCanvas(config): Provides canvas utilities
- * - useSound(src): Plays audio files
+ * - useParticles(): Particle effects (explosions, trails, sparkles)
+ * - useScreenShake(): Screen shake for impacts
+ * - useSynthSound(): Synthesized sound effects (no audio files needed)
  *
  * Available utilities (from lib/utils.ts):
  * - Collision: rectsCollide, circlesCollide, pointInRect, entitiesCollide
  * - Math: clamp, lerp, random, randomInt, randomItem
  * - Vector: addVectors, subtractVectors, scaleVector, normalizeVector
+ *
+ * See examples/ folder for complete game implementations:
+ * - flappy-bird.tsx: Tap to fly, avoid pipes
+ * - space-shooter.tsx: Keyboard shooter with power-ups
+ * - brick-breaker.tsx: Mouse-controlled paddle game
  */
 
 import { useRef, useCallback } from 'react';
@@ -25,30 +32,31 @@ import { useGameLoop } from '@/lib/hooks/useGameLoop';
 import { useKeyboard } from '@/lib/hooks/useKeyboard';
 import { useMouse } from '@/lib/hooks/useMouse';
 import { useCanvas } from '@/lib/hooks/useCanvas';
-import { GameState, Vector2D } from '@/lib/types';
-import { clamp, circlesCollide, random, randomInt } from '@/lib/utils';
+import { useParticles } from '@/lib/hooks/useParticles';
+import { useScreenShake } from '@/lib/hooks/useScreenShake';
+import { useSynthSound } from '@/lib/hooks/useSound';
+import { GameState } from '@/lib/types';
+import { clamp, circlesCollide, randomInt } from '@/lib/utils';
 import GameWindow from './GameWindow';
 import GameControls from './GameControls';
 import styles from './Game.module.css';
 
 // =============================================================================
 // GAME CONFIGURATION
-// Customize these values for your game
 // =============================================================================
 
 const CONFIG = {
   width: 800,
   height: 600,
-  playerSpeed: 300,      // pixels per second
+  playerSpeed: 300,
   playerSize: 20,
   targetSize: 15,
-  targetSpawnRate: 1000, // ms between spawns
-  maxTargets: 10,
+  targetSpawnRate: 800,
+  maxTargets: 12,
 };
 
 // =============================================================================
-// GAME STATE
-// Define your game's state here using useRef for mutable game data
+// GAME STATE TYPES
 // =============================================================================
 
 interface Target {
@@ -97,10 +105,18 @@ export default function Game() {
     clear,
     drawCircle,
     drawText,
+    ctx,
   } = useCanvas(CONFIG);
 
   // Mouse/touch input (relative to canvas)
   const mouse = useMouse(canvasRef as React.RefObject<HTMLElement>);
+
+  // Visual effects
+  const particles = useParticles();
+  const shake = useScreenShake();
+
+  // Sound effects (synthesized - no audio files needed!)
+  const sound = useSynthSound();
 
   // Mutable game state (useRef to avoid re-renders during game loop)
   const player = useRef<PlayerState>({ x: width / 2, y: height / 2 });
@@ -110,7 +126,6 @@ export default function Game() {
 
   // =========================================================================
   // GAME LOGIC
-  // Implement your game mechanics here
   // =========================================================================
 
   const spawnTarget = useCallback(() => {
@@ -119,8 +134,8 @@ export default function Game() {
     const colors = ['#00d4ff', '#00ff88', '#ff4444', '#ffaa00', '#aa44ff'];
     const target: Target = {
       id: targetIdCounter.current++,
-      x: randomInt(CONFIG.targetSize, width - CONFIG.targetSize),
-      y: randomInt(CONFIG.targetSize, height - CONFIG.targetSize),
+      x: randomInt(CONFIG.targetSize + 20, width - CONFIG.targetSize - 20),
+      y: randomInt(CONFIG.targetSize + 20, height - CONFIG.targetSize - 20),
       radius: CONFIG.targetSize,
       color: colors[randomInt(0, colors.length - 1)],
     };
@@ -132,9 +147,9 @@ export default function Game() {
     targets.current = [];
     lastSpawn.current = 0;
     targetIdCounter.current = 0;
-  }, [width, height]);
+    particles.clear();
+  }, [width, height, particles]);
 
-  // Handle play button - reset state when starting new game
   const handlePlay = useCallback(() => {
     resetGameState();
     play();
@@ -142,7 +157,6 @@ export default function Game() {
 
   // =========================================================================
   // GAME LOOP
-  // This runs every frame (~60fps) while the game is playing
   // =========================================================================
 
   useGameLoop((deltaTime) => {
@@ -163,7 +177,7 @@ export default function Game() {
       player.current.y += speed;
     }
 
-    // Player movement (mouse/touch) - move toward click/touch position
+    // Player movement (mouse/touch)
     if (mouse.isDown) {
       const dx = mouse.position.x - player.current.x;
       const dy = mouse.position.y - player.current.y;
@@ -177,6 +191,14 @@ export default function Game() {
     // Keep player in bounds
     player.current.x = clamp(player.current.x, CONFIG.playerSize, width - CONFIG.playerSize);
     player.current.y = clamp(player.current.y, CONFIG.playerSize, height - CONFIG.playerSize);
+
+    // Player trail particles
+    if (isPlaying && (isPressed('ArrowLeft') || isPressed('ArrowRight') || isPressed('ArrowUp') || isPressed('ArrowDown') || isPressed('KeyW') || isPressed('KeyA') || isPressed('KeyS') || isPressed('KeyD') || mouse.isDown)) {
+      particles.trail(player.current.x, player.current.y, {
+        colors: ['#00d4ff', '#ffffff'],
+        gravity: 0,
+      });
+    }
 
     // Spawn targets periodically
     lastSpawn.current += deltaTime;
@@ -195,40 +217,65 @@ export default function Game() {
       );
       if (hit) {
         addScore(10);
-        return false; // Remove target
+        sound.coin();
+        shake.shakeSmall();
+        particles.explode(target.x, target.y, {
+          count: 15,
+          colors: [target.color, '#ffffff'],
+        });
+        return false;
       }
       return true;
     });
 
+    // Update effects
+    particles.update(deltaTime);
+    shake.update(deltaTime);
+
     // --- RENDER PHASE ---
+    const c = ctx;
+    if (!c) return;
+
+    c.save();
+    shake.apply(c);
 
     // Clear canvas
     clear('#0a0a0f');
 
-    // Draw targets
+    // Draw targets with glow effect
     for (const target of targets.current) {
+      // Glow
+      c.shadowColor = target.color;
+      c.shadowBlur = 15;
       drawCircle(target.x, target.y, target.radius, target.color);
+      c.shadowBlur = 0;
     }
 
-    // Draw player
-    drawCircle(player.current.x, player.current.y, CONFIG.playerSize, '#ffffff');
+    // Draw particles
+    particles.render(c);
 
-    // Draw score
-    drawText(`Score: ${score}`, 20, 20, {
+    // Draw player with glow
+    c.shadowColor = '#00d4ff';
+    c.shadowBlur = 20;
+    drawCircle(player.current.x, player.current.y, CONFIG.playerSize, '#ffffff');
+    c.shadowBlur = 0;
+
+    c.restore();
+
+    // Draw HUD (outside shake transform)
+    drawText(`Score: ${score}`, 20, 25, {
       color: '#00d4ff',
       font: 'bold 24px system-ui',
     });
 
-    // Draw high score
     if (highScore > 0) {
-      drawText(`Best: ${highScore}`, 20, 50, {
+      drawText(`Best: ${highScore}`, 20, 55, {
         color: '#8b8b9e',
         font: '16px system-ui',
       });
     }
 
-    // Draw instructions
-    drawText('Arrow keys or WASD to move • Click/tap to move toward pointer', width / 2, height - 20, {
+    drawText('Arrow keys / WASD to move • Click/tap to move toward pointer', width / 2, height - 20, {
       color: '#8b8b9e',
       font: '14px system-ui',
       align: 'center',
@@ -243,16 +290,14 @@ export default function Game() {
   return (
     <div className={styles.container}>
       <GameWindow>
-        {/* IDLE STATE - Start screen */}
         {state === GameState.IDLE && (
           <div className={styles.overlay}>
             <h2>If you build it, they will come</h2>
-            <p className={styles.subtitle}>Collect the orbs!</p>
+            <p className={styles.subtitle}>Collect the glowing orbs!</p>
             <button onClick={handlePlay}>Start Game</button>
           </div>
         )}
 
-        {/* PAUSED STATE */}
         {state === GameState.PAUSED && (
           <div className={styles.overlay}>
             <h2>Paused</h2>
@@ -260,7 +305,6 @@ export default function Game() {
           </div>
         )}
 
-        {/* GAME OVER STATE */}
         {state === GameState.GAME_OVER && result && (
           <div className={styles.overlay}>
             <h2>Game Over!</h2>
@@ -274,7 +318,6 @@ export default function Game() {
           </div>
         )}
 
-        {/* GAME CANVAS */}
         <div ref={containerRef} className={styles.canvasContainer}>
           <canvas
             ref={canvasRef}
@@ -286,7 +329,6 @@ export default function Game() {
         </div>
       </GameWindow>
 
-      {/* GAME CONTROLS */}
       <GameControls
         state={state}
         onPause={pause}
